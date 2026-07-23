@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>卡片管理</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --fg:#1c2430; --muted:#6b7683; --line:#e5e8ec;
+    --accent:#4f6ef2; --accent-d:#3f59d8; --ok:#22a06b; --ok-bg:#e7f6ef;
+    --warn:#c9820a; --danger:#d64545; --shadow:0 1px 3px rgba(20,30,50,.08),0 6px 24px rgba(20,30,50,.05);
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#0f1319; --card:#181d25; --fg:#e7ecf2; --muted:#8b96a4; --line:#2a323d;
+      --accent:#6d86f5; --accent-d:#5670ee; --ok:#3cc98a; --ok-bg:#12241c;
+      --shadow:0 1px 3px rgba(0,0,0,.3),0 8px 30px rgba(0,0,0,.25); }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--fg); font-size:16px;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Segoe UI",sans-serif; }
+  .topbar{ display:flex; align-items:center; gap:14px; padding:14px 20px;
+    background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+  .brand{ font-weight:700; font-size:18px; letter-spacing:.5px; }
+  .pill{ display:flex; align-items:center; gap:7px; font-size:13px; color:var(--muted);
+    background:var(--bg); border:1px solid var(--line); padding:5px 12px; border-radius:999px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--danger); }
+  .dot.on{ background:var(--ok); }
+  .spacer{ margin-left:auto; }
+  button{ font-family:inherit; font-size:15px; cursor:pointer; border-radius:10px; border:none; }
+  .btn{ background:var(--accent); color:#fff; padding:10px 18px; }
+  .btn:hover{ background:var(--accent-d); }
+  .btn.ghost{ background:transparent; color:var(--fg); border:1px solid var(--line); }
+  .btn.ghost:hover{ background:var(--bg); }
+  .btn.big{ font-size:17px; padding:14px 26px; border-radius:12px; }
+  .btn.warn{ background:var(--warn); }
+  .btn.danger{ background:var(--danger); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  main{ max-width:860px; margin:0 auto; padding:22px 20px 60px; }
+  .nav{ display:flex; gap:8px; margin-bottom:22px; flex-wrap:wrap; }
+  .nav button{ background:transparent; color:var(--muted); padding:9px 18px; border-radius:999px;
+    font-weight:600; font-size:15px; }
+  .nav button.active{ background:var(--accent); color:#fff; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:22px; box-shadow:var(--shadow); margin-bottom:18px; }
+  .card h2{ margin:0 0 4px; font-size:18px; }
+  .card .sub{ color:var(--muted); font-size:14px; margin:0 0 16px; }
+  label{ display:block; font-size:13px; color:var(--muted); margin:12px 0 5px; font-weight:600; }
+  input,select,textarea{ width:100%; background:var(--bg); border:1px solid var(--line); color:var(--fg);
+    border-radius:10px; padding:11px 13px; font-size:15px; font-family:inherit; }
+  input.mono{ font-family:var(--mono); letter-spacing:.5px; }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .hide{ display:none!important; }
+  .muted{ color:var(--muted); }
+  .tag{ font-size:12px; padding:3px 9px; border-radius:6px; font-weight:600; }
+  .tag.id{ background:#fdf0d5; color:#a86a08; } .tag.ic{ background:#e0f0fa; color:#2b7bb0; }
+  @media(prefers-color-scheme:dark){ .tag.id{ background:#3a2e12; color:#e0b04a; } .tag.ic{ background:#12303f; color:#6cc4e8; } }
+  table{ width:100%; border-collapse:collapse; }
+  th,td{ text-align:left; padding:11px 8px; border-bottom:1px solid var(--line); font-size:15px; }
+  th{ font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  td.mono{ font-family:var(--mono); font-size:13px; color:var(--muted); }
+  .icon-btn{ background:transparent; color:var(--muted); padding:6px 10px; font-size:14px; }
+  .icon-btn:hover{ color:var(--fg); }
+
+  /* 簽到大畫面 */
+  .stage{ text-align:center; padding:40px 20px; min-height:320px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px; border-radius:20px; transition:background .25s; }
+  .stage.flash{ background:var(--ok-bg); }
+  .stage .prompt{ font-size:20px; color:var(--muted); }
+  .stage .who{ font-size:56px; font-weight:800; line-height:1.1; }
+  .stage .meta{ font-size:18px; color:var(--muted); }
+  .stage .check{ font-size:64px; color:var(--ok); }
+  .stage .unknown{ font-size:40px; font-weight:700; color:var(--warn); }
+  .waves{ font-size:44px; opacity:.35; }
+
+  .warnbox{ background:rgba(201,130,10,.12); border:1px solid var(--warn); color:var(--fg);
+    border-radius:10px; padding:11px 14px; font-size:13.5px; margin:10px 0; }
+  details{ border:1px solid var(--line); border-radius:12px; padding:4px 16px; margin-bottom:14px; background:var(--card); }
+  details summary{ cursor:pointer; font-weight:600; padding:12px 0; }
+  .logline{ font-family:var(--mono); font-size:11px; color:var(--muted); }
+  a{ color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">卡片管理</span>
+  <span class="pill"><span class="dot" id="dot"></span><span id="connText">未連線</span></span>
+  <span class="spacer"></span>
+  <button class="btn" id="connectBtn">連接讀卡機</button>
+  <button class="btn ghost hide" id="disconnectBtn">中斷</button>
+</div>
+
+<main>
+  <div id="unsupported" class="card hide" style="border-color:var(--danger)">
+    <h2 style="color:var(--danger)">這個瀏覽器不支援藍牙連接</h2>
+    <p class="muted">請改用電腦版 <b>Chrome / Edge</b>,或 Android 手機的 Chrome。Safari 與 iPhone 無法使用。
+    網頁也需從 <b>https://</b> 或 <b>localhost</b> 開啟。</p>
+  </div>
+
+  <nav class="nav">
+    <button data-tab="checkin" class="active">簽到</button>
+    <button data-tab="roster">名冊</button>
+    <button data-tab="add">新增卡片</button>
+    <button data-tab="advanced">進階</button>
+  </nav>
+
+  <!-- 簽到 -->
+  <section id="tab-checkin">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div><h2 style="margin:0">簽到模式</h2><p class="sub" style="margin:2px 0 0">開始後,把卡片靠近讀卡機即可簽到</p></div>
+        <div>
+          <button class="btn big" id="startCheckin" disabled>開始簽到</button>
+          <button class="btn big danger hide" id="stopCheckin">結束</button>
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="waves">〰️</div>
+        <div class="prompt">尚未開始</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:6px">
+        <h2 style="margin:0">今日簽到紀錄 <span class="muted" id="todayCount" style="font-size:15px"></span></h2>
+        <div>
+          <button class="btn ghost" id="exportLog">匯出紀錄</button>
+          <button class="icon-btn" id="clearLog">清空</button>
+        </div>
+      </div>
+      <div id="logTable"></div>
+    </div>
+  </section>
+
+  <!-- 名冊 -->
+  <section id="tab-roster" class="hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:14px">
+        <h2 style="margin:0">名冊 <span class="muted" id="cardCount" style="font-size:15px"></span></h2>
+        <div>
+          <button class="btn ghost" id="exportBtn">匯出 CSV</button>
+          <button class="btn ghost" id="importBtn">匯入 CSV</button>
+          <input type="file" id="importFile" accept=".csv,text/csv" class="hide">
+        </div>
+      </div>
+      <input id="search" placeholder="搜尋姓名 / 單位 / 學號 / 卡號" style="margin-bottom:14px">
+      <div id="cardTable"></div>
+    </div>
+  </section>
+
+  <!-- 新增卡片 -->
+  <section id="tab-add" class="hide">
+    <div class="card">
+      <h2>新增卡片</h2>
+      <p class="sub">把卡片放上讀卡機,讀取後填入姓名存檔。這裡建立的資料會用在簽到時顯示。</p>
+      <div class="row">
+        <button class="btn" data-cmd="readuid" disabled>讀取感應卡 (IC)</button>
+        <button class="btn ghost" data-cmd="readid" disabled>讀取門禁卡 (ID)</button>
+      </div>
+      <div id="readResult" style="margin-top:16px" class="muted">尚未讀取</div>
+      <div id="addForm" class="hide">
+        <label>姓名</label>
+        <input id="addName" placeholder="例如:王小明">
+        <div class="row">
+          <div style="flex:1; min-width:160px"><label>單位</label><input id="addUnit" placeholder="例如:資訊工程系"></div>
+          <div style="flex:1; min-width:160px"><label>學號</label><input id="addSid" placeholder="例如:B10901001"></div>
+        </div>
+        <div style="margin-top:14px"><button class="btn" id="saveBtn">存入名冊</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 進階 -->
+  <section id="tab-advanced" class="hide">
+    <div class="warnbox">以下是給進階使用者的工具,包含會覆蓋卡片、不可復原的寫入功能。不確定用途請勿使用。</div>
+
+    <details>
+      <summary>讀卡機狀態 / 完整讀取</summary>
+      <div style="padding-bottom:14px">
+        <button class="btn ghost" id="advDump" disabled>完整讀取 IC 卡(64 blocks)</button>
+        <pre id="advDumpOut" class="hide" style="background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px; overflow-x:auto; font-family:var(--mono); font-size:12px; white-space:pre; margin-top:12px"></pre>
+      </div>
+    </details>
+
+    <details>
+      <summary>寫門禁卡 (ID / 125kHz)</summary>
+      <div style="padding-bottom:14px">
+        <div class="warnbox">需要可寫入的卡(T5577 等),寫入不可復原。</div>
+        <label>卡號 hex(10 位)</label>
+        <input id="widHex" class="mono" placeholder="3AA17E001B" maxlength="14">
+        <div style="margin-top:12px"><button class="btn warn" id="writeIdBtn" disabled>寫入 ID 卡</button></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>複製 UID 到 magic 卡(改號)</summary>
+      <div style="padding-bottom:14px">
+        <div class="warnbox">需要 UID 可改寫的 magic 卡(CUID / UID 卡)。</div>
+        <label>要寫入的 UID hex(8 位)</label>
+        <input id="wicUid" class="mono" placeholder="732E9B65" maxlength="8">
+        <div class="row" style="margin-top:8px">
+          <select id="wicPick" style="max-width:280px"><option value="">從名冊挑選…</option></select>
+        </div>
+        <div style="margin-top:12px"><button class="btn warn" id="writeUidBtn" disabled>寫入 UID(block 0)</button></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>寫單一 block(實驗)</summary>
+      <div style="padding-bottom:14px">
+        <div class="warnbox">寫錯 sector trailer(block 3、7、11…)可能鎖死區塊。</div>
+        <div class="row">
+          <div style="flex:0 0 90px"><label>block #</label><input id="wbBlk" class="mono" value="1"></div>
+          <div style="flex:1; min-width:200px"><label>16 bytes hex</label><input id="wbData" class="mono" placeholder="00112233...ff"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn danger" id="writeBlockBtn" disabled>寫入 block</button></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>連線紀錄</summary>
+      <div id="log" style="max-height:160px; overflow-y:auto; padding-bottom:12px"></div>
+    </details>
+  </section>
+</main>
+
+<script>
+// ================= 協定(與擷取封包逐位元組驗證過) =================
+const SVC='0000ffe0-0000-1000-8000-00805f9b34fb';
+const CH_WRITE='0000ffe2-0000-1000-8000-00805f9b34fb';
+const CH_NOTIFY='0000ffe1-0000-1000-8000-00805f9b34fb';
+const SAK_NAMES={0x08:'MIFARE Classic 1K',0x88:'MIFARE Classic 1K',0x18:'MIFARE Classic 4K',
+  0x98:'MIFARE Classic 4K',0x00:'Ultralight / NTAG',0x20:'CPU 卡'};
+const hex=b=>[...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+const hexsp=b=>[...b].map(x=>x.toString(16).padStart(2,'0')).join(' ');
+const fromHex=s=>{s=s.replace(/[^0-9a-fA-F]/g,'');const a=[];for(let i=0;i<s.length;i+=2)a.push(parseInt(s.substr(i,2),16));return Uint8Array.from(a);};
+const sum8=b=>b.reduce((a,c)=>(a+c)&0xff,0);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const buildFrame=(p,seq)=>{p=Uint8Array.from(p);return Uint8Array.from([0xff,p.length,seq&0xff,...p,sum8(p),0xfe]);};
+// --- CSV 小工具(支援雙引號欄位) ---
+const csvCell=v=>{v=(v==null?'':String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+const csvRow=arr=>arr.map(csvCell).join(',');
+function csvParse(text){
+  const rows=[];let row=[],cur='',q=false;text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else{ if(ch==='"')q=true; else if(ch===','){row.push(cur);cur='';}
+      else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur='';} else cur+=ch; }
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function parseFrame(buf){const f=new Uint8Array(buf);
+  if(f.length<5||f[0]!==0xff||f[f.length-1]!==0xfe)return null;
+  const len=f[1],seq=f[2],payload=f.slice(3,3+len);
+  if(payload.length!==len||f[3+len]!==sum8(payload))return null;
+  return{seq,payload};}
+
+// ================= BLE =================
+let device=null,chWrite=null,seq=1,statusTimer=null,waiters=[];
+const log=m=>{const el=document.getElementById('log');
+  el.innerHTML=`<div class="logline">${new Date().toLocaleTimeString()} ${m}</div>`+el.innerHTML;};
+function onNotify(ev){const f=parseFrame(ev.target.value.buffer);if(!f)return;
+  for(let i=waiters.length-1;i>=0;i--){if(waiters[i].test(f)){waiters[i].resolve(f);waiters.splice(i,1);}}}
+const nextSeq=()=>{seq=(seq+1)&0xff;return seq;};
+async function send(payload,{timeout=4000,expectCmd=null}={}){
+  const s=nextSeq();
+  const p=new Promise((resolve,reject)=>{
+    const test=f=>f.seq===s&&(expectCmd===null||f.payload[0]===expectCmd);
+    const w={test,resolve};waiters.push(w);
+    setTimeout(()=>{const i=waiters.indexOf(w);if(i>=0){waiters.splice(i,1);reject(new Error('逾時'));}},timeout);
+  });
+  await chWrite.writeValueWithoutResponse(buildFrame(payload,s));
+  return p;
+}
+async function connect(){
+  if(!navigator.bluetooth){document.getElementById('unsupported').classList.remove('hide');return;}
+  try{
+    device=await navigator.bluetooth.requestDevice({filters:[{name:'NFC Mini Rev'}],optionalServices:[SVC]});
+    device.addEventListener('gattserverdisconnected',onDisconnect);
+    const server=await device.gatt.connect();
+    const svc=await server.getPrimaryService(SVC);
+    chWrite=await svc.getCharacteristic(CH_WRITE);
+    const chNotify=await svc.getCharacteristic(CH_NOTIFY);
+    await chNotify.startNotifications();
+    chNotify.addEventListener('characteristicvaluechanged',onNotify);
+    log('已連線 '+device.name); setConnected(true);
+    pollStatus(); statusTimer=setInterval(pollStatus,2500);
+  }catch(e){log('連線失敗: '+e.message);}
+}
+function onDisconnect(){setConnected(false);log('連線中斷');clearInterval(statusTimer);stopCheckin();}
+function disconnect(){if(device&&device.gatt.connected)device.gatt.disconnect();}
+function setConnected(on){
+  document.getElementById('dot').classList.toggle('on',on);
+  document.getElementById('connectBtn').classList.toggle('hide',on);
+  document.getElementById('disconnectBtn').classList.toggle('hide',!on);
+  document.querySelectorAll('[data-cmd],#startCheckin,#writeIdBtn,#writeUidBtn,#writeBlockBtn,#advDump')
+    .forEach(b=>b.disabled=!on);
+  if(!on)document.getElementById('connText').textContent='未連線';
+}
+async function pollStatus(){
+  if(checkinActive)return;
+  try{const f=await send([0x02],{expectCmd:0x02,timeout:2200});
+    document.getElementById('connText').innerHTML=`已連線 · 電量 ${f.payload[1]}%`;
+  }catch(e){}
+}
+
+// ================= 資料儲存 =================
+const CARDS='nfcmini_cards', LOGS='nfcmini_checkins';
+const loadCards=()=>JSON.parse(localStorage.getItem(CARDS)||'[]');
+const saveCards=a=>{localStorage.setItem(CARDS,JSON.stringify(a));renderRoster();refreshPickers();};
+const loadLogs=()=>JSON.parse(localStorage.getItem(LOGS)||'[]');
+const saveLogs=a=>{localStorage.setItem(LOGS,JSON.stringify(a));renderLogs();};
+const findCard=code=>loadCards().find(c=>c.code===code);
+
+// ================= 簽到 =================
+let checkinActive=false, presentCode=null;
+const stage=document.getElementById('stage');
+let audioCtx=null;
+function beep(ok=true){
+  try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    o.frequency.value=ok?880:280; g.gain.value=.15;
+    o.start(); o.stop(audioCtx.currentTime+.12);
+  }catch(e){}
+}
+function stageIdle(){ stage.classList.remove('flash');
+  stage.innerHTML='<div class="waves">〰️</div><div class="prompt">請靠卡簽到…</div>'; }
+const detailLine=c=>[c.unit,c.sid].filter(Boolean).join(' · ');
+function showSwipe(card,code,type,dup){
+  stage.classList.add('flash');
+  const now=new Date();
+  if(card){
+    const info=detailLine(card);
+    stage.innerHTML=`<div class="check">${dup?'↺':'✓'}</div><div class="who">${esc(card.name)}</div>`+
+      (info?`<div class="meta">${esc(info)}</div>`:'')+
+      `<div class="meta">${now.toLocaleTimeString()} ${dup?'已簽到過':'簽到成功'}</div>`;
+    beep(!dup);
+  }else{
+    stage.innerHTML=`<div class="unknown">未建檔的卡片</div>`+
+      `<div class="meta mono">${type} ${code}</div>`+
+      `<div class="meta">可到「新增卡片」建檔後再簽到</div>`;
+    beep(false);
+  }
+  setTimeout(()=>{if(checkinActive)stageIdle();},2500);
+}
+function onSwipe(code,type){
+  const card=findCard(code);
+  const today=new Date().toDateString();
+  const already=card && loadLogs().some(l=>l.code===code && new Date(l.ts).toDateString()===today);
+  showSwipe(card,code,type,already);
+  if(card && !already){
+    const logs=loadLogs();
+    logs.unshift({code,name:card.name,unit:card.unit||'',sid:card.sid||'',ts:new Date().toISOString()});
+    saveLogs(logs);
+  }
+}
+async function checkinLoop(){
+  while(checkinActive){
+    let code=null,type=null;
+    try{const f=await send([0x11],{expectCmd:0x11,timeout:1400});
+      if(f.payload[1]===0x00){code=hex(f.payload.slice(3,7)).toUpperCase();type='IC';}}catch(e){}
+    if(!code){try{const f=await send([0x04],{expectCmd:0x04,timeout:1400});
+      if(f.payload[1]===0x00){code=hex(f.payload.slice(2,7)).toUpperCase();type='ID';}}catch(e){}}
+    if(code){ if(code!==presentCode){presentCode=code;onSwipe(code,type);} }
+    else presentCode=null;
+    await sleep(450);
+  }
+}
+function startCheckin(){
+  checkinActive=true; presentCode=null;
+  document.getElementById('startCheckin').classList.add('hide');
+  document.getElementById('stopCheckin').classList.remove('hide');
+  document.getElementById('connText').textContent='簽到中…';
+  stageIdle(); checkinLoop();
+}
+function stopCheckin(){
+  checkinActive=false;
+  document.getElementById('startCheckin').classList.remove('hide');
+  document.getElementById('stopCheckin').classList.add('hide');
+  stage.classList.remove('flash');
+  stage.innerHTML='<div class="waves">〰️</div><div class="prompt">已結束</div>';
+}
+
+// ================= 讀卡(新增卡片用) =================
+let lastRead=null;
+function showRead(html,card){
+  document.getElementById('readResult').innerHTML=html;
+  lastRead=card;
+  document.getElementById('addForm').classList.toggle('hide',!card);
+  if(card){
+    const existing=findCard(card.code);
+    document.getElementById('addName').value=existing?existing.name:'';
+    document.getElementById('addUnit').value=existing?(existing.unit||''):'';
+    document.getElementById('addSid').value=existing?(existing.sid||''):'';
+    if(existing)document.getElementById('readResult').innerHTML=html+' <span class="muted">(此卡已建檔,存檔會更新)</span>';
+  }
+}
+async function readUid(){
+  showRead('讀取中…');
+  try{const f=await send([0x11],{expectCmd:0x11});
+    if(f.payload[1]!==0x00){showRead('沒有偵測到感應卡,請把卡放好再試');return;}
+    const uid=hex(f.payload.slice(3,7)).toUpperCase(),sak=f.payload[7];
+    showRead(`感應卡 <b>${uid}</b> · ${SAK_NAMES[sak]||('SAK '+sak)}`,{type:'IC',code:uid});
+  }catch(e){showRead('讀取失敗: '+e.message);}
+}
+async function readId(){
+  showRead('讀取中…');
+  try{const f=await send([0x04],{expectCmd:0x04});
+    if(f.payload[1]!==0x00){showRead('沒有偵測到門禁卡');return;}
+    const id=hex(f.payload.slice(2,7)).toUpperCase();
+    showRead(`門禁卡 <b>${id}</b>`,{type:'ID',code:id});
+  }catch(e){showRead('讀取失敗: '+e.message);}
+}
+async function advDump(){
+  const out=document.getElementById('advDumpOut'); out.classList.remove('hide'); out.textContent='讀取中…';
+  const blocks={};let uid=null;const s=nextSeq();
+  const collector=f=>{if(f.seq!==s)return false;const pl=f.payload;
+    if(pl[0]===0x11&&pl.length>=7)uid=pl.slice(3,7);
+    else if(pl[0]===0x0b&&pl.length>=19&&pl[1]<0x40)blocks[pl[1]]=pl.slice(3,19);return false;};
+  waiters.push({test:collector,resolve:()=>{}});
+  await chWrite.writeValueWithoutResponse(buildFrame([0x0b],s));
+  await sleep(2500); waiters=waiters.filter(w=>w.test!==collector);
+  const n=Object.keys(blocks).length;
+  if(!n){out.textContent='沒讀到資料,確認 IC 卡有放好';return;}
+  let t=`UID ${uid?hex(uid).toUpperCase():'?'} · ${n}/64 blocks\n`;
+  for(let b=0;b<64;b++){const d=blocks[b];
+    t+=`block ${String(b).padStart(2,'0')}: ${d?hexsp(d):'(未讀到)'}${b%4===3?'  <trailer>':''}\n`;}
+  out.textContent=t;
+}
+
+// ================= 寫卡 =================
+async function writeId(hexStr){
+  const id=fromHex(hexStr);
+  if(id.length!==5){alert('ID 卡號需要 10 位 hex');return;}
+  if(!confirm(`確定把 ${hexStr.toUpperCase()} 寫入 ID 卡?不可復原。`))return;
+  const rev=Uint8Array.from([...id].reverse());
+  try{const f=await send([0x0c,...rev],{expectCmd:0x0c,timeout:6000});alert('寫入完成: '+hex(f.payload));}
+  catch(e){alert('寫入無回應(可能沒放卡或卡不可寫)');}
+}
+async function writeUid(hexStr){
+  const uid=fromHex(hexStr);
+  if(uid.length!==4){alert('UID 需要 8 位 hex');return;}
+  if(!confirm(`確定把 UID ${hexStr.toUpperCase()} 寫入 magic 卡 block 0?`))return;
+  const rev=Uint8Array.from([...uid].reverse());        // block0 內為讀取的反序
+  const bcc=rev[0]^rev[1]^rev[2]^rev[3];
+  await writeBlock(0,Uint8Array.from([...rev,bcc,0x08,0x04,0x00,0,0,0,0,0,0,0,0]),true);
+}
+async function writeBlock(blk,data16,silent){
+  if(data16.length!==16){alert('block 資料需要 16 bytes');return;}
+  if(!silent&&!confirm(`確定寫入 block ${blk}?`))return;
+  try{const f=await send([0x08,blk,0x00,...data16],{expectCmd:0x08,timeout:6000});
+    alert(f.payload[1]===0x00?`block ${blk} 寫入成功`:`回應: ${hex(f.payload)}`);}
+  catch(e){alert('寫入無回應');}
+}
+
+// ================= 畫面渲染 =================
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderRoster(){
+  const db=loadCards();const q=(document.getElementById('search').value||'').toLowerCase();
+  document.getElementById('cardCount').textContent=`(${db.length})`;
+  const hit=c=>!q||[c.name,c.unit,c.sid,c.code].some(v=>(v||'').toLowerCase().includes(q));
+  const rows=db.filter(hit)
+    .map(c=>`<tr>
+      <td><input value="${esc(c.name)}" data-f="name" data-id="${c.id}" style="padding:6px 8px"></td>
+      <td><input value="${esc(c.unit||'')}" data-f="unit" data-id="${c.id}" placeholder="單位" style="padding:6px 8px"></td>
+      <td><input value="${esc(c.sid||'')}" data-f="sid" data-id="${c.id}" placeholder="學號" style="padding:6px 8px"></td>
+      <td><span class="tag ${c.type==='ID'?'id':'ic'}">${c.type}</span></td>
+      <td class="mono">${c.code}</td>
+      <td><button class="icon-btn" data-del="${c.id}">刪除</button></td></tr>`).join('');
+  document.getElementById('cardTable').innerHTML=db.length
+    ?`<table><tr><th>姓名</th><th>單位</th><th>學號</th><th>類型</th><th>卡號</th><th></th></tr>${rows}</table>`
+    :'<p class="muted">名冊是空的。到「新增卡片」讀一張卡建檔,或用「匯入 CSV」載入。</p>';
+}
+function renderLogs(){
+  const logs=loadLogs();const today=new Date().toDateString();
+  const todays=logs.filter(l=>new Date(l.ts).toDateString()===today);
+  document.getElementById('todayCount').textContent=`(${todays.length} 人)`;
+  document.getElementById('logTable').innerHTML=todays.length
+    ?`<table><tr><th>時間</th><th>姓名</th><th>單位</th><th>學號</th></tr>`+
+      todays.map(l=>`<tr><td>${new Date(l.ts).toLocaleTimeString()}</td><td>${esc(l.name)}</td><td class="muted">${esc(l.unit||'')}</td><td class="muted">${esc(l.sid||'')}</td></tr>`).join('')+`</table>`
+    :'<p class="muted">今天還沒有簽到紀錄。</p>';
+}
+function refreshPickers(){
+  const db=loadCards();const el=document.getElementById('wicPick');
+  el.innerHTML='<option value="">從名冊挑選…</option>'+
+    db.filter(c=>c.type==='IC').map(c=>`<option value="${c.code}">${esc(c.name)} · ${c.code}</option>`).join('');
+}
+
+// ================= 事件 =================
+document.getElementById('connectBtn').onclick=connect;
+document.getElementById('disconnectBtn').onclick=disconnect;
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  ['checkin','roster','add','advanced'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hide',t!==b.dataset.tab));
+});
+document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>({readuid:readUid,readid:readId}[b.dataset.cmd])());
+document.getElementById('startCheckin').onclick=startCheckin;
+document.getElementById('stopCheckin').onclick=stopCheckin;
+document.getElementById('saveBtn').onclick=()=>{
+  if(!lastRead)return;const name=document.getElementById('addName').value.trim();
+  if(!name){alert('請輸入姓名');return;}
+  const db=loadCards().filter(c=>c.code!==lastRead.code);
+  db.unshift({id:Date.now(),code:lastRead.code,type:lastRead.type,name,
+    unit:document.getElementById('addUnit').value.trim(),
+    sid:document.getElementById('addSid').value.trim(),ts:new Date().toISOString()});
+  saveCards(db);showRead('已存入名冊 ✓',null);
+};
+document.getElementById('search').oninput=renderRoster;
+document.getElementById('cardTable').onclick=e=>{const id=e.target.dataset.del;
+  if(id&&confirm('刪除這張卡?'))saveCards(loadCards().filter(c=>c.id!=id));};
+document.getElementById('cardTable').onchange=e=>{
+  const f=e.target.dataset.f,id=e.target.dataset.id;if(!f)return;
+  const db=loadCards();const c=db.find(x=>x.id==id);
+  if(c){c[f]=e.target.value;localStorage.setItem(CARDS,JSON.stringify(db));refreshPickers();}
+};
+document.getElementById('wicPick').onchange=e=>{if(e.target.value)document.getElementById('wicUid').value=e.target.value;};
+document.getElementById('writeIdBtn').onclick=()=>writeId(document.getElementById('widHex').value);
+document.getElementById('writeUidBtn').onclick=()=>writeUid(document.getElementById('wicUid').value);
+document.getElementById('writeBlockBtn').onclick=()=>writeBlock(parseInt(document.getElementById('wbBlk').value),fromHex(document.getElementById('wbData').value),false);
+document.getElementById('advDump').onclick=advDump;
+function downloadCSV(text,name){
+  const blob=new Blob(['﻿'+text],{type:'text/csv;charset=utf-8'});  // BOM 讓 Excel 正確顯示中文
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=name+'-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+// 名冊匯出:姓名,單位,學號,類型,卡號
+document.getElementById('exportBtn').onclick=()=>{
+  const db=loadCards();if(!db.length){alert('名冊是空的');return;}
+  const csv=[csvRow(['姓名','單位','學號','類型','卡號'])]
+    .concat(db.map(c=>csvRow([c.name,c.unit||'',c.sid||'',c.type,c.code]))).join('\n');
+  downloadCSV(csv,'名冊');
+};
+// 名冊匯入:依表頭對應欄位,卡號重複則更新
+document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{
+    const rows=csvParse(r.result);if(rows.length<2)throw 0;
+    const head=rows[0].map(h=>h.trim());
+    const col=n=>head.findIndex(h=>h.includes(n));
+    const ci={name:col('姓名'),unit:col('單位'),sid:col('學號'),type:col('類型'),code:col('卡號')};
+    if(ci.name<0||ci.code<0){alert('CSV 需要至少「姓名」和「卡號」欄');return;}
+    const db=loadCards();const byCode=new Map(db.map(c=>[c.code,c]));let add=0,upd=0;
+    rows.slice(1).forEach(rw=>{
+      const code=(rw[ci.code]||'').trim().toUpperCase();if(!code)return;
+      const rec={code,name:(rw[ci.name]||'').trim(),
+        unit:ci.unit>=0?(rw[ci.unit]||'').trim():'',
+        sid:ci.sid>=0?(rw[ci.sid]||'').trim():'',
+        type:ci.type>=0&&(rw[ci.type]||'').trim()?(rw[ci.type]).trim().toUpperCase():'IC'};
+      if(byCode.has(code)){Object.assign(byCode.get(code),rec);upd++;}
+      else{const c={id:Date.now()+add,ts:new Date().toISOString(),...rec};db.unshift(c);byCode.set(code,c);add++;}
+    });
+    saveCards(db);alert(`匯入完成:新增 ${add} 筆,更新 ${upd} 筆`);
+  }catch(_){alert('CSV 格式不對');}};
+  r.readAsText(f);};
+// 簽到紀錄匯出:含人數摘要 + 明細
+document.getElementById('exportLog').onclick=()=>{
+  const logs=loadLogs();if(!logs.length){alert('沒有簽到紀錄');return;}
+  const uniq=new Set(logs.map(l=>l.code)).size;
+  const summary=[csvRow(['簽到人數',uniq]),csvRow(['總筆數',logs.length]),''];
+  const detail=[csvRow(['簽到時間','姓名','單位','學號','卡號'])]
+    .concat(logs.slice().reverse().map(l=>csvRow([new Date(l.ts).toLocaleString(),l.name,l.unit||'',l.sid||'',l.code])));
+  downloadCSV(summary.concat(detail).join('\n'),'簽到紀錄');
+};
+document.getElementById('clearLog').onclick=()=>{if(confirm('清空所有簽到紀錄?'))saveLogs([]);};
+
+// init
+if(!navigator.bluetooth)document.getElementById('unsupported').classList.remove('hide');
+renderRoster();renderLogs();refreshPickers();
+</script>
+</body>
+</html>
