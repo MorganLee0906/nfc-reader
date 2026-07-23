@@ -15,27 +15,19 @@
 
 ## 部署方式
 
-### 目前:掛在 Linux 小電腦(100.98.7.8)
-- 檔案位置:`/home/lcy96/Projects/nfc-mini-reader/webapp`
-- 靜態伺服器:`python3 -m http.server 8091`(user crontab `@reboot` 開機自動啟動)
-- 網址:`http://100.98.7.8:8091/`,已加入首頁 dashboard 的「刷卡簽到」卡片。
+### 線上版(主要)——GitHub Pages
+**https://morganlee0906.github.io/nfc-reader/**
 
-### ⚠️ Web Bluetooth 需要「安全內容」——http://IP 會連不到讀卡機
-瀏覽器規定 `navigator.bluetooth` 只在 https、或 `http://localhost` 才啟用。
-用 `http://100.98.7.8:8091` 開,畫面可以顯示、名冊/簽到都能用,但「連線讀卡機」會失效。
-兩個不動 Tailscale 的解法:
+Pages 本身就是 https,是「安全內容」,Web Bluetooth 直接可用,不必設定任何東西。
+Mac 和 Android 的 Chrome 打開網址就能連讀卡機。改 `index.html` push 到 `master`
+分支後,Pages 會自動重新部署。
 
-1. **把這個來源加進 Chrome 白名單(最簡單,每台裝置設一次)**
-   Chrome 開 `chrome://flags/#unsafely-treat-insecure-origin-as-secure` →
-   填入 `http://100.98.7.8:8091` → 設為 Enabled → 重開 Chrome。之後藍牙就能用。
-2. **在要刷卡的那台裝置本機跑**:把 webapp 複製到該機,`./run.sh` 起 localhost,
-   用 `http://localhost:8000` 開(localhost 本身就是安全內容)。
-
-### Mac 本機(備用)
+### Mac 本機(離線 / 開發用)
 ```bash
 cd <webapp 目錄>
 ./run.sh                    # 起 http://localhost:8000
 ```
+`localhost` 也是安全內容,藍牙一樣可用。
 
 ## 功能
 
