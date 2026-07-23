@@ -65,14 +65,40 @@
 
   /* 簽到大畫面 */
   .stage{ text-align:center; padding:40px 20px; min-height:320px; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:10px; border-radius:20px; transition:background .25s; }
-  .stage.flash{ background:var(--ok-bg); }
-  .stage .prompt{ font-size:20px; color:var(--muted); }
+    align-items:center; justify-content:center; gap:14px; border-radius:20px; transition:background .25s;
+    background:var(--bg); }
+  .stage[data-state="ok"]{ background:var(--ok-bg); }
+  .stage[data-state="dup"]{ background:rgba(201,130,10,.15); }
+  .stage[data-state="unknown"]{ background:rgba(214,69,69,.14); }
+  .stage .prompt{ font-size:22px; color:var(--muted); font-weight:600; }
   .stage .who{ font-size:56px; font-weight:800; line-height:1.1; }
   .stage .meta{ font-size:18px; color:var(--muted); }
-  .stage .check{ font-size:64px; color:var(--ok); }
-  .stage .unknown{ font-size:40px; font-weight:700; color:var(--warn); }
-  .waves{ font-size:44px; opacity:.35; }
+  .stage .unknown-title{ font-size:40px; font-weight:800; color:var(--danger); }
+  .stage-icon{ display:flex; }
+  .stage-icon.idle{ color:var(--accent); opacity:.75; }
+  .stage-icon.ok{ color:var(--ok); }
+  .stage-icon.bad{ color:var(--danger); }
+  .stage-icon svg{ width:96px; height:96px; }
+  .stage-icon.idle svg{ animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:.55;transform:scale(1);} 50%{opacity:1;transform:scale(1.06);} }
+  /* 全螢幕:整片就是那塊有顏色的區域 */
+  .stage:fullscreen{ min-height:100vh; width:100vw; border-radius:0; gap:3vh; }
+  .stage:fullscreen .stage-icon svg{ width:22vh; height:22vh; }
+  .stage:fullscreen .who{ font-size:11vw; }
+  .stage:fullscreen .prompt{ font-size:5vh; }
+  .stage:fullscreen .meta{ font-size:3.5vh; }
+  .stage:fullscreen .unknown-title{ font-size:8vw; }
+  .stage .exit-hint{ position:fixed; top:16px; right:20px; font-size:14px; color:var(--muted); display:none; }
+  .stage:fullscreen .exit-hint{ display:block; }
+  /* 名冊:可點擊卡號改綁 */
+  .codebtn{ font-family:var(--mono); font-size:13px; background:transparent; border:1px dashed var(--line);
+    color:var(--muted); padding:4px 9px; border-radius:7px; cursor:pointer; }
+  .codebtn:hover{ border-style:solid; border-color:var(--accent); color:var(--fg); }
+  .codebtn.waiting{ border-color:var(--accent); color:var(--accent); }
+  /* rebind 提示條 */
+  #toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%); z-index:50;
+    background:var(--accent); color:#fff; padding:12px 20px; border-radius:12px; box-shadow:var(--shadow);
+    font-size:15px; display:none; align-items:center; gap:10px; max-width:90vw; }
 
   .warnbox{ background:rgba(201,130,10,.12); border:1px solid var(--warn); color:var(--fg);
     border-radius:10px; padding:11px 14px; font-size:13.5px; margin:10px 0; }
@@ -98,6 +124,8 @@
     網頁也需從 <b>https://</b> 或 <b>localhost</b> 開啟。</p>
   </div>
 
+  <div id="toast"></div>
+
   <nav class="nav">
     <button data-tab="checkin" class="active">簽到</button>
     <button data-tab="roster">名冊</button>
@@ -112,12 +140,13 @@
         <div><h2 style="margin:0">簽到模式</h2><p class="sub" style="margin:2px 0 0">開始後,把卡片靠近讀卡機即可簽到</p></div>
         <div>
           <button class="btn big" id="startCheckin" disabled>開始簽到</button>
+          <button class="btn big ghost hide" id="fullscreenBtn">全螢幕</button>
           <button class="btn big danger hide" id="stopCheckin">結束</button>
         </div>
       </div>
-      <div class="stage" id="stage">
-        <div class="waves">〰️</div>
+      <div class="stage" id="stage" data-state="off">
         <div class="prompt">尚未開始</div>
+        <span class="exit-hint">按 Esc 離開全螢幕</span>
       </div>
     </div>
 
@@ -300,7 +329,7 @@ function setConnected(on){
   if(!on)document.getElementById('connText').textContent='未連線';
 }
 async function pollStatus(){
-  if(checkinActive)return;
+  if(checkinActive||busy)return;
   try{const f=await send([0x02],{expectCmd:0x02,timeout:2200});
     document.getElementById('connText').innerHTML=`已連線 · 電量 ${f.payload[1]}%`;
   }catch(e){}
@@ -315,73 +344,115 @@ const saveLogs=a=>{localStorage.setItem(LOGS,JSON.stringify(a));renderLogs();};
 const findCard=code=>loadCards().find(c=>c.code===code);
 
 // ================= 簽到 =================
-let checkinActive=false, presentCode=null;
+let checkinActive=false, presentCode=null, busy=false;
 const stage=document.getElementById('stage');
+const EXIT_HINT='<span class="exit-hint">按 Esc 離開全螢幕</span>';
+const SVG={
+  wave:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 8a9 9 0 0 1 0 8"/><path d="M9 5.5a15 15 0 0 1 0 13"/><path d="M12.5 3.5a20 20 0 0 1 0 17"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-11"/></svg>',
+  cross:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
 let audioCtx=null;
 function beep(ok=true){
   try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended')audioCtx.resume();
     const o=audioCtx.createOscillator(),g=audioCtx.createGain();
     o.connect(g);g.connect(audioCtx.destination);
     o.frequency.value=ok?880:280; g.gain.value=.15;
     o.start(); o.stop(audioCtx.currentTime+.12);
   }catch(e){}
 }
-function stageIdle(){ stage.classList.remove('flash');
-  stage.innerHTML='<div class="waves">〰️</div><div class="prompt">請靠卡簽到…</div>'; }
 const detailLine=c=>[c.unit,c.sid].filter(Boolean).join(' · ');
-function showSwipe(card,code,type,dup){
-  stage.classList.add('flash');
-  const now=new Date();
-  if(card){
-    const info=detailLine(card);
-    stage.innerHTML=`<div class="check">${dup?'↺':'✓'}</div><div class="who">${esc(card.name)}</div>`+
-      (info?`<div class="meta">${esc(info)}</div>`:'')+
-      `<div class="meta">${now.toLocaleTimeString()} ${dup?'已簽到過':'簽到成功'}</div>`;
-    beep(!dup);
-  }else{
-    stage.innerHTML=`<div class="unknown">未建檔的卡片</div>`+
-      `<div class="meta mono">${type} ${code}</div>`+
-      `<div class="meta">可到「新增卡片」建檔後再簽到</div>`;
-    beep(false);
-  }
-  setTimeout(()=>{if(checkinActive)stageIdle();},2500);
+function setStage(state,html){ stage.dataset.state=state; stage.innerHTML=html+EXIT_HINT; }
+function stageIdle(){ setStage('idle',`<div class="stage-icon idle">${SVG.wave}</div><div class="prompt">請刷卡</div>`); }
+function stageOff(){ setStage('off',`<div class="stage-icon idle" style="animation:none">${SVG.wave}</div><div class="prompt">尚未開始</div>`); }
+function showKnown(card,dup){
+  const info=detailLine(card);
+  setStage(dup?'dup':'ok',
+    `<div class="stage-icon ok">${SVG.check}</div>`+
+    `<div class="who">${esc(card.name)}</div>`+
+    (info?`<div class="meta">${esc(info)}</div>`:'')+
+    `<div class="meta">${new Date().toLocaleTimeString()} ${dup?'已簽到過':'簽到成功'}</div>`);
 }
-function onSwipe(code,type){
-  const card=findCard(code);
-  const today=new Date().toDateString();
-  const already=card && loadLogs().some(l=>l.code===code && new Date(l.ts).toDateString()===today);
-  showSwipe(card,code,type,already);
-  if(card && !already){
-    const logs=loadLogs();
-    logs.unshift({code,name:card.name,unit:card.unit||'',sid:card.sid||'',ts:new Date().toISOString()});
-    saveLogs(logs);
-  }
+function showUnknown(code,type){
+  setStage('unknown',
+    `<div class="stage-icon bad">${SVG.cross}</div>`+
+    `<div class="unknown-title">卡號未於名單內</div>`+
+    `<div class="meta mono">${type} ${code}</div>`);
+}
+// 讀一次:先 IC(0x11)再 ID(0x04),有卡回 {code,type},無卡回 null
+async function readOnce(){
+  try{const f=await send([0x11],{expectCmd:0x11,timeout:1200});
+    if(f.payload[1]===0x00)return{code:hex(f.payload.slice(3,7)).toUpperCase(),type:'IC'};}catch(e){}
+  try{const f=await send([0x04],{expectCmd:0x04,timeout:1200});
+    if(f.payload[1]===0x00)return{code:hex(f.payload.slice(2,7)).toUpperCase(),type:'ID'};}catch(e){}
+  return null;
 }
 async function checkinLoop(){
   while(checkinActive){
-    let code=null,type=null;
-    try{const f=await send([0x11],{expectCmd:0x11,timeout:1400});
-      if(f.payload[1]===0x00){code=hex(f.payload.slice(3,7)).toUpperCase();type='IC';}}catch(e){}
-    if(!code){try{const f=await send([0x04],{expectCmd:0x04,timeout:1400});
-      if(f.payload[1]===0x00){code=hex(f.payload.slice(2,7)).toUpperCase();type='ID';}}catch(e){}}
-    if(code){ if(code!==presentCode){presentCode=code;onSwipe(code,type);} }
-    else presentCode=null;
-    await sleep(450);
+    const hit=await readOnce();
+    if(hit){
+      if(hit.code!==presentCode){          // 邊緣:新卡進場才動作
+        presentCode=hit.code;
+        const card=findCard(hit.code);
+        if(card){
+          const today=new Date().toDateString();
+          const dup=loadLogs().some(l=>l.code===hit.code&&new Date(l.ts).toDateString()===today);
+          showKnown(card,dup); beep(!dup);
+          if(!dup){const logs=loadLogs();
+            logs.unshift({code:hit.code,name:card.name,unit:card.unit||'',sid:card.sid||'',ts:new Date().toISOString()});
+            saveLogs(logs);}
+        }else{ showUnknown(hit.code,hit.type); beep(false); }
+      }
+      // 同一張卡還在感應區 → 畫面持續顯示,不重置(修正「有逼聲但螢幕沒反應」)
+    }else{
+      if(presentCode!==null){ presentCode=null; stageIdle(); }  // 卡片離開才回到「請刷卡」
+    }
+    await sleep(300);
   }
 }
 function startCheckin(){
   checkinActive=true; presentCode=null;
   document.getElementById('startCheckin').classList.add('hide');
   document.getElementById('stopCheckin').classList.remove('hide');
+  document.getElementById('fullscreenBtn').classList.remove('hide');
   document.getElementById('connText').textContent='簽到中…';
   stageIdle(); checkinLoop();
 }
 function stopCheckin(){
-  checkinActive=false;
+  checkinActive=false; presentCode=null;
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
   document.getElementById('startCheckin').classList.remove('hide');
   document.getElementById('stopCheckin').classList.add('hide');
-  stage.classList.remove('flash');
-  stage.innerHTML='<div class="waves">〰️</div><div class="prompt">已結束</div>';
+  document.getElementById('fullscreenBtn').classList.add('hide');
+  stageOff();
+}
+function goFullscreen(){
+  if(!checkinActive)startCheckin();
+  (stage.requestFullscreen?stage.requestFullscreen():Promise.reject()).catch(()=>alert('此瀏覽器不支援全螢幕'));
+}
+// rebind 用的提示條
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='flex';}
+function hideToast(){document.getElementById('toast').style.display='none';}
+async function readWait(ms,msg){
+  showToast(msg); const end=Date.now()+ms;
+  while(Date.now()<end){ const hit=await readOnce(); if(hit){hideToast();return hit;} await sleep(200); }
+  hideToast(); return null;
+}
+async function rebindCard(id){
+  if(!device||!device.gatt.connected){alert('請先連接讀卡機');return;}
+  if(checkinActive){alert('請先結束簽到模式,再改卡號');return;}
+  if(busy)return; busy=true;
+  const c0=loadCards().find(x=>x.id==id); const name=c0?c0.name:'';
+  const btn=document.querySelector(`[data-rebind="${id}"]`); if(btn)btn.classList.add('waiting');
+  const hit=await readWait(8000,`把新卡片靠上讀卡機,更新「${name}」的卡號…`);
+  if(btn)btn.classList.remove('waiting'); busy=false;
+  if(!hit){alert('沒讀到卡片,已取消');return;}
+  const dupOwner=loadCards().find(x=>x.code===hit.code&&x.id!=id);
+  if(dupOwner&&!confirm(`卡號 ${hit.code} 已屬於「${dupOwner.name}」,仍要改到「${name}」?`))return;
+  if(!confirm(`把「${name}」的卡號改成 ${hit.code}(${hit.type})?`))return;
+  const db=loadCards(); const c=db.find(x=>x.id==id); c.code=hit.code; c.type=hit.type;
+  saveCards(db);
 }
 
 // ================= 讀卡(新增卡片用) =================
@@ -468,10 +539,10 @@ function renderRoster(){
       <td><input value="${esc(c.unit||'')}" data-f="unit" data-id="${c.id}" placeholder="單位" style="padding:6px 8px"></td>
       <td><input value="${esc(c.sid||'')}" data-f="sid" data-id="${c.id}" placeholder="學號" style="padding:6px 8px"></td>
       <td><span class="tag ${c.type==='ID'?'id':'ic'}">${c.type}</span></td>
-      <td class="mono">${c.code}</td>
+      <td><button class="codebtn" data-rebind="${c.id}" title="點擊後刷新卡片以更新卡號">${c.code} ✎</button></td>
       <td><button class="icon-btn" data-del="${c.id}">刪除</button></td></tr>`).join('');
   document.getElementById('cardTable').innerHTML=db.length
-    ?`<table><tr><th>姓名</th><th>單位</th><th>學號</th><th>類型</th><th>卡號</th><th></th></tr>${rows}</table>`
+    ?`<table><tr><th>姓名</th><th>單位</th><th>學號</th><th>類型</th><th>卡號(點擊改綁)</th><th></th></tr>${rows}</table>`
     :'<p class="muted">名冊是空的。到「新增卡片」讀一張卡建檔,或用「匯入 CSV」載入。</p>';
 }
 function renderLogs(){
@@ -499,6 +570,7 @@ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>({readuid:readUid,readid:readId}[b.dataset.cmd])());
 document.getElementById('startCheckin').onclick=startCheckin;
 document.getElementById('stopCheckin').onclick=stopCheckin;
+document.getElementById('fullscreenBtn').onclick=goFullscreen;
 document.getElementById('saveBtn').onclick=()=>{
   if(!lastRead)return;const name=document.getElementById('addName').value.trim();
   if(!name){alert('請輸入姓名');return;}
@@ -509,8 +581,11 @@ document.getElementById('saveBtn').onclick=()=>{
   saveCards(db);showRead('已存入名冊 ✓',null);
 };
 document.getElementById('search').oninput=renderRoster;
-document.getElementById('cardTable').onclick=e=>{const id=e.target.dataset.del;
-  if(id&&confirm('刪除這張卡?'))saveCards(loadCards().filter(c=>c.id!=id));};
+document.getElementById('cardTable').onclick=e=>{
+  const del=e.target.dataset.del, rebind=e.target.closest('[data-rebind]')?.dataset.rebind;
+  if(del&&confirm('刪除這張卡?'))saveCards(loadCards().filter(c=>c.id!=del));
+  else if(rebind)rebindCard(rebind);
+};
 document.getElementById('cardTable').onchange=e=>{
   const f=e.target.dataset.f,id=e.target.dataset.id;if(!f)return;
   const db=loadCards();const c=db.find(x=>x.id==id);
